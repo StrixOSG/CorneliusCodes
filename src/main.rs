@@ -1,16 +1,12 @@
-#![feature(proc_macro_hygiene, decl_macro)]
-
 #[macro_use]
 extern crate rocket;
-#[macro_use]
-extern crate rocket_contrib;
 
 use log::info;
-use rocket::config::{Config, Environment};
+use rocket::fairing::AdHoc;
 use rocket::http::Status;
-use rocket_contrib::json::{Json, JsonValue};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use rocket::serde::json::Json;
+use serde_json::{json, Value};
+use rocket::serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
 
@@ -118,7 +114,7 @@ pub struct GameState {
 }
 
 #[get("/")]
-fn handle_index() -> JsonValue {
+fn handle_index() -> Json<Value> {
     logic::get_info()
 }
 
@@ -135,7 +131,7 @@ fn handle_start(start_req: Json<GameState>) -> Status {
 }
 
 #[post("/move", format = "json", data = "<move_req>")]
-fn handle_move(move_req: Json<GameState>) -> JsonValue {
+fn handle_move(move_req: Json<GameState>) -> Json<Value> {
     let chosen = logic::get_move(
         &move_req.game,
         &move_req.turn,
@@ -143,7 +139,7 @@ fn handle_move(move_req: Json<GameState>) -> JsonValue {
         &move_req.you,
     );
 
-    return json!({ "move": chosen });
+    return Json(json!({ "move": chosen }));
 }
 
 #[post("/end", format = "json", data = "<end_req>")]
@@ -153,28 +149,33 @@ fn handle_end(end_req: Json<GameState>) -> Status {
     Status::Ok
 }
 
-fn main() {
-    let address = "0.0.0.0";
-    let env_port = env::var("PORT").ok();
-    let env_port = env_port.as_deref().unwrap_or("8080");
-    let port = env_port.parse::<u16>().unwrap();
+#[launch]
+fn rocket() -> _ {
+    // Lots of web hosting services expect you to bind to the port specified by the `PORT`
+    // environment variable. However, Rocket looks at the `ROCKET_PORT` environment variable.
+    // If we find a value for `PORT`, we set `ROCKET_PORT` to that value.
+    if let Ok(port) = env::var("PORT") {
+        env::set_var("ROCKET_PORT", &port);
+    }
+
+    // We default to 'info' level logging. But if the `RUST_LOG` environment variable is set,
+    // we keep that value instead.
+    if env::var("RUST_LOG").is_err() {
+        env::set_var("RUST_LOG", "info");
+    }
 
     env_logger::init();
 
-    let config = Config::build(Environment::Development)
-        .address(address)
-        .port(port)
-        .finalize()
-        .unwrap();
+    info!("Starting Battlesnake Server...");
 
-    info!(
-        "Starting Battlesnake Server at http://{}:{}...",
-        address, port
-    );
-    rocket::custom(config)
+    rocket::build()
+        .attach(AdHoc::on_response("Server ID Middleware", |_, res| {
+            Box::pin(async move {
+                res.set_raw_header("Server", "battlesnake/github/starter-snake-rust");
+            })
+        }))
         .mount(
             "/",
             routes![handle_index, handle_start, handle_move, handle_end],
         )
-        .launch();
 }
