@@ -8,8 +8,6 @@ use crate::{Battlesnake, Board, Coord, Game};
 
 pub fn get_info() -> Json<Value> {
     info!("INFO");
-
-    // Personalize the look of your snake per https://docs.battlesnake.com/references/personalization
     return Json(json!({
         "apiversion": "1",
         "author": "strixos",
@@ -149,10 +147,9 @@ fn valid_move(spot: &Coord, board: &Board) -> bool {
     }
 }
 
-// Returns the potential value of the move Cornelius
 fn value_of_move(spot: &Coord, board: &Board, me: &Battlesnake) -> i32 {
     let base_value = match spot {
-        spot if spot_has_snake(spot, &board.snakes) => -10, // Bite someone else before you bite the dust!
+        spot if spot_has_snake(spot, &board.snakes) => -10,
         spot if !valid_move(&spot, &board) => -100,
         Coord { y: 0, .. } => 60,
         Coord { x: 0, .. } => 60,
